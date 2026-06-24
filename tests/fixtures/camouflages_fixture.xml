@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<camouflages>
+  <!-- Ship groups: each group lists camouflage IDs available to ships in that group -->
+  <shipGroups>
+    <shipGroup id="Destroyer">DL01,DL02,DL03</shipGroup>
+    <shipGroup id="Cruiser">CL01,CL02</shipGroup>
+    <shipGroup id="Battleship">BB01</shipGroup>
+  </shipGroups>
+
+  <!-- Color schemes: each colourSchema defines 4 RGBA colours -->
+  <colorSchemas>
+    <colorSchema id="cs_destroyer_01" name="Autumn">
+      <color r="0.35" g="0.25" b="0.12" a="1.0"/>
+      <color r="0.55" g="0.42" b="0.20" a="1.0"/>
+      <color r="0.72" g="0.60" b="0.35" a="1.0"/>
+      <color r="0.20" g="0.18" b="0.12" a="1.0"/>
+    </colorSchema>
+    <colorSchema id="cs_battleship_01" name="Ocean">
+      <color r="0.30" g="0.38" b="0.28" a="1.0"/>
+      <color r="0.22" g="0.30" b="0.20" a="1.0"/>
+      <color r="0.45" g="0.52" b="0.40" a="1.0"/>
+      <color r="0.15" g="0.20" b="0.14" a="1.0"/>
+    </colorSchema>
+  </colorSchemas>
+
+  <!-- Camouflage entries -->
+  <camouflages>
+    <!-- Tiled camouflage with UV transform -->
+    <camouflage id="DL01" name="Dazzle" colorScheme="cs_destroyer_01" tile="true">
+      <texture colorMask="content/gameplay/consolidation/camouflage/textures/dazzle_a_camo_mask.dds" tile="true">
+        <part category="hull_tile"/>
+        <part category="deckhouse"/>
+      </texture>
+      <uvTransform partCategory="hull_tile" offsetU="0.1" offsetV="0.2" scaleU="1.5" scaleV="2.0"/>
+      <uvTransform partCategory="deckhouse" offsetU="0.0" offsetV="0.0" scaleU="1.0" scaleV="1.0"/>
+    </camouflage>
+
+    <!-- Non-tiled / material-replacement camouflage -->
+    <camouflage id="DL02" name="Flat Green" colorScheme="cs_destroyer_01" tile="false">
+      <texture colorMask="content/gameplay/consolidation/camouflage/textures/green_albedo.dds" tile="false">
+        <part category="hull_tile"/>
+      </texture>
+    </camouflage>
+
+    <!-- Battleship tiled camouflage -->
+    <camouflage id="BB01" name="Naval Storm" colorScheme="cs_battleship_01" tile="true">
+      <texture colorMask="content/gameplay/consolidation/camouflage/textures/naval_storm_mask.dds" tile="true">
+        <part category="hull_tile"/>
+        <part category="gun"/>
+        <part category="director"/>
+      </texture>
+      <uvTransform partCategory="gun" offsetU="0.33" offsetV="0.0" scaleU="0.5" scaleV="1.0"/>
+      <uvTransform partCategory="director" offsetU="0.66" offsetV="0.0" scaleU="0.5" scaleV="1.0"/>
+    </camouflage>
+  </camouflages>
+</camouflages>

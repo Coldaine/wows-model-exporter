@@ -296,10 +296,15 @@ if(BUILD_TESTS)
   find_library(CUNIT_LIBRARY cunit)
   if(CUNIT_LIBRARY)
     include(CTest)
+
+    # copy test fixtures next to the test binary so relative paths work
+    file(COPY tests/fixtures DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/tests)
+
     add_executable(wows-geometry-test tests/tests.c)
     target_link_libraries(wows-geometry-test PRIVATE wows-geometry
                                                      ${CUNIT_LIBRARY})
-    add_test(NAME wows-geometry-test COMMAND wows-geometry-test)
+    add_test(NAME wows-geometry-test COMMAND wows-geometry-test
+             WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
     add_custom_target(
       tests
       COMMAND wows-geometry-test
@@ -359,7 +364,7 @@ install(
   RUNTIME DESTINATION ${BIN_INSTALL_DIR}
   LIBRARY DESTINATION ${LIB_INSTALL_DIR}
   ARCHIVE DESTINATION ${LIB_INSTALL_DIR})
-install(FILES inc/wows-geometry.h DESTINATION ${INCLUDE_INSTALL_DIR})
+install(FILES inc/wows-geometry.h inc/wows-camo.h DESTINATION ${INCLUDE_INSTALL_DIR})
 
 # ── Documentation ─────────────────────────────────────────────────────────────
 if(BUILD_DOC)
