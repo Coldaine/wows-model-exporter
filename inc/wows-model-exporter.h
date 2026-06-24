@@ -308,7 +308,7 @@ tinygltf::Model wows_stitch_merge_parts(std::vector<wows_glb_part> &parts);
 /**
  * @brief Decode a DDS texture buffer to raw RGBA pixels.
  *
- * Supports the BC1/BC3/BC5/BC7 block-compressed formats used in WoWs.
+ * Supports the BC1/BC2/BC3/BC4/BC5/BC7 block-compressed formats used in WoWs.
  *
  * @param d   Pointer to the DDS file data in memory.
  * @param sz  Size of the DDS data in bytes.
@@ -328,6 +328,17 @@ std::vector<uint8_t> wows_stitch_decode_dds(const uint8_t *d, size_t sz, int *W,
  * @return PNG-encoded bytes, or empty on failure.
  */
 std::vector<uint8_t> wows_stitch_dds_to_png(const std::string &path, int max_sz);
+
+/**
+ * @brief Convert decoded WoWS `_mg` RGBA pixels to glTF ORM channel layout in-place.
+ *
+ * WoWS `_mg` uses R=metallic, G=gloss, B=ambient occlusion. glTF ORM uses
+ * R=occlusion, G=roughness, B=metallic; roughness is `255 - gloss`.
+ * Alpha is forced opaque because the packed ORM texture has no alpha meaning.
+ *
+ * @param rgba RGBA pixel buffer (`width × height × 4` bytes).
+ */
+void wows_stitch_convert_mg_to_orm(std::vector<uint8_t> &rgba);
 
 std::vector<uint8_t> wows_stitch_dds_to_png_mg(const std::string &path, int max_sz);
 
@@ -370,6 +381,16 @@ void wows_stitch_apply_textures(tinygltf::Model &model, const std::vector<std::s
                                 wows_assets_bin_pdb_t *pdb, const std::string &game_dir, int lod_level,
                                 bool excl_damage, int max_tex, std::function<void(int)> progress_cb = nullptr,
                                 wows_file_provider_t file_provider = nullptr);
+
+/**
+ * @brief Remove mesh records with no primitives and update node mesh references.
+ *
+ * Nodes are preserved, including transform-only nodes and child links, so scene
+ * hierarchy remains intact while invalid empty mesh references are detached.
+ *
+ * @param model glTF model to compact in-place.
+ */
+void wows_stitch_purge_empty_meshes(tinygltf::Model &model);
 
 /**
  * @brief Apply a uniform grey default material to all primitives in a model.

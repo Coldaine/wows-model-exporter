@@ -861,6 +861,8 @@ void wows_stitch_apply_textures(tinygltf::Model &model, const std::vector<std::s
         }
         if (ti_mg >= 0) {
             mat.pbrMetallicRoughness.metallicRoughnessTexture.index = ti_mg;
+            mat.occlusionTexture.index = ti_mg;
+            mat.occlusionTexture.strength = 1.0;
             mat.pbrMetallicRoughness.metallicFactor = 1.0;
             mat.pbrMetallicRoughness.roughnessFactor = 1.0;
         } else {
@@ -1069,6 +1071,39 @@ void wows_stitch_apply_textures(tinygltf::Model &model, const std::vector<std::s
         }
         report(20 + (int)((mi + 1) * 80 / n_geoms));
     }
+}
+
+void wows_stitch_purge_empty_meshes(tinygltf::Model &model) {
+    std::vector<tinygltf::Mesh> active_meshes;
+    std::map<int, int> mesh_index_map;
+
+    for (int ni = 0; ni < (int)model.nodes.size(); ++ni) {
+        int mi = model.nodes[ni].mesh;
+        if (mi >= 0 && mi < (int)model.meshes.size() && model.meshes[mi].primitives.empty())
+            model.nodes[ni].mesh = -1;
+    }
+
+    for (int mi = 0; mi < (int)model.meshes.size(); ++mi) {
+        if (!model.meshes[mi].primitives.empty()) {
+            int new_idx = (int)active_meshes.size();
+            mesh_index_map[mi] = new_idx;
+            active_meshes.push_back(std::move(model.meshes[mi]));
+        } else {
+            mesh_index_map[mi] = -1;
+        }
+    }
+
+    for (auto &node : model.nodes) {
+        if (node.mesh >= 0) {
+            auto it = mesh_index_map.find(node.mesh);
+            node.mesh = it == mesh_index_map.end() ? -1 : it->second;
+        }
+    }
+
+    int old_count = (int)model.meshes.size();
+    int new_count = (int)active_meshes.size();
+    model.meshes = std::move(active_meshes);
+    vlog("mesh_cleanup", "Purged %d empty meshes. Remaining: %d\n", old_count - new_count, new_count);
 }
 
 void wows_stitch_apply_default_material(tinygltf::Model &model) {
