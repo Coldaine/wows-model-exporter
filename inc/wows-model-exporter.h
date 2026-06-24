@@ -329,6 +329,8 @@ std::vector<uint8_t> wows_stitch_decode_dds(const uint8_t *d, size_t sz, int *W,
  */
 std::vector<uint8_t> wows_stitch_dds_to_png(const std::string &path, int max_sz);
 
+std::vector<uint8_t> wows_stitch_dds_to_png_mg(const std::string &path, int max_sz);
+
 /**
  * @brief Decode a DDS buffer in memory and encode it as a PNG byte buffer.
  *
@@ -341,6 +343,8 @@ std::vector<uint8_t> wows_stitch_dds_to_png(const std::string &path, int max_sz)
  * @return PNG-encoded bytes, or empty on failure.
  */
 std::vector<uint8_t> wows_stitch_dds_to_png_from_memory(const uint8_t *data, size_t size, int max_sz);
+
+std::vector<uint8_t> wows_stitch_dds_to_png_from_memory_mg(const uint8_t *data, size_t size, int max_sz);
 
 /** @} */
 

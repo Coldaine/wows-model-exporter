@@ -690,7 +690,7 @@ static std::string find_texture(const std::string &dir, const std::string &st, c
         }
     }
     for (auto &cs : cands)
-        for (auto ext : {".dd0", ".dd1", ".dds"}) {
+        for (auto ext : {".dd0", ".dd1", ".dd2", ".dds"}) {
             std::string p = dir + "/" + cs + channel + ext;
             if (wows_stitch_file_exists(p))
                 return p;
@@ -723,11 +723,49 @@ static std::vector<uint8_t> load_texture_bytes(const std::string &tdir, const st
         }
     }
     for (const auto &cs : cands) {
-        for (const char *ext : {".dd0", ".dd1", ".dds"}) {
+        for (const char *ext : {".dd0", ".dd1", ".dd2", ".dds"}) {
             std::string rel = mdir + "/" + cs + channel + ext;
             auto buf = file_provider(rel);
             if (!buf.empty()) {
                 auto png = wows_stitch_dds_to_png_from_memory(buf.data(), buf.size(), max_sz);
+                if (!png.empty())
+                    return png;
+            }
+        }
+    }
+    return {};
+}
+
+static std::vector<uint8_t> load_texture_bytes_mg(const std::string &tdir, const std::string &tstem, const char *channel,
+                                                  const std::string &game_dir, wows_file_provider_t file_provider,
+                                                  int max_sz) {
+    std::string dds = find_texture(tdir, tstem, channel);
+    if (!dds.empty())
+        return wows_stitch_dds_to_png_mg(dds, max_sz);
+
+    if (!file_provider)
+        return {};
+
+    std::string mdir = wows_stitch_normalize_slashes(tdir);
+    if (mdir.size() > game_dir.size() && mdir.compare(0, game_dir.size(), game_dir) == 0)
+        mdir = mdir.substr(game_dir.size());
+    if (!mdir.empty() && mdir[0] == '/')
+        mdir = mdir.substr(1);
+
+    std::vector<std::string> cands = {tstem};
+    for (const char **s = MFM_STRIP; *s; ++s) {
+        size_t sl = strlen(*s);
+        if (tstem.size() > sl && tstem.compare(tstem.size() - sl, sl, *s) == 0) {
+            cands.push_back(tstem.substr(0, tstem.size() - sl));
+            break;
+        }
+    }
+    for (const auto &cs : cands) {
+        for (const char *ext : {".dd0", ".dd1", ".dd2", ".dds"}) {
+            std::string rel = mdir + "/" + cs + channel + ext;
+            auto buf = file_provider(rel);
+            if (!buf.empty()) {
+                auto png = wows_stitch_dds_to_png_from_memory_mg(buf.data(), buf.size(), max_sz);
                 if (!png.empty())
                     return png;
             }
@@ -803,17 +841,32 @@ void wows_stitch_apply_textures(tinygltf::Model &model, const std::vector<std::s
         return ti;
     };
 
-    auto ensure_mat = [&](const std::string &name, const std::vector<uint8_t> &png) -> int {
+    auto ensure_mat = [&](const std::string &name, const std::vector<uint8_t> &png_a,
+                          const std::vector<uint8_t> &png_n, const std::vector<uint8_t> &png_mg) -> int {
         auto it = stem_to_mat.find(name);
         if (it != stem_to_mat.end())
             return it->second;
-        int ti = embed_png(png);
+        int ti_a = png_a.empty() ? -1 : embed_png(png_a);
+        int ti_n = png_n.empty() ? -1 : embed_png(png_n);
+        int ti_mg = png_mg.empty() ? -1 : embed_png(png_mg);
+
         tinygltf::Material mat;
         mat.name = name;
         mat.doubleSided = true;
-        mat.pbrMetallicRoughness.baseColorTexture.index = ti;
-        mat.pbrMetallicRoughness.metallicFactor = 0.0;
-        mat.pbrMetallicRoughness.roughnessFactor = 0.8;
+        if (ti_a >= 0)
+            mat.pbrMetallicRoughness.baseColorTexture.index = ti_a;
+        if (ti_n >= 0) {
+            mat.normalTexture.index = ti_n;
+            mat.normalTexture.scale = 1.0;
+        }
+        if (ti_mg >= 0) {
+            mat.pbrMetallicRoughness.metallicRoughnessTexture.index = ti_mg;
+            mat.pbrMetallicRoughness.metallicFactor = 1.0;
+            mat.pbrMetallicRoughness.roughnessFactor = 1.0;
+        } else {
+            mat.pbrMetallicRoughness.metallicFactor = 0.0;
+            mat.pbrMetallicRoughness.roughnessFactor = 0.8;
+        }
         int mi = (int)model.materials.size();
         model.materials.push_back(mat);
         stem_to_mat[name] = mi;
@@ -930,15 +983,21 @@ void wows_stitch_apply_textures(tinygltf::Model &model, const std::vector<std::s
                                             : mfile;
                     std::string tdir = game_dir + "/" + mdir;
 
-                    std::vector<uint8_t> png = load_texture_bytes(tdir, tstem, "_a", game_dir, file_provider, max_tex);
-                    if (png.empty()) {
+                    std::vector<uint8_t> png_a = load_texture_bytes(tdir, tstem, "_a", game_dir, file_provider, max_tex);
+                    if (png_a.empty()) {
                         vlog(geom_tag.c_str(), "no albedo texture: %s\n", tstem.c_str());
                         continue;
                     }
-                    int mat = ensure_mat(tstem, png);
+                    std::vector<uint8_t> png_n = load_texture_bytes(tdir, tstem, "_n", game_dir, file_provider, max_tex);
+                    std::vector<uint8_t> png_mg = load_texture_bytes_mg(tdir, tstem, "_mg", game_dir, file_provider, max_tex);
+
+                    int mat = ensure_mat(tstem, png_a, png_n, png_mg);
                     gt.geo_map_mat[geo_map_id] = mat;
-                    vlog(geom_tag.c_str(), "albedo %s → material slot %d (%zuKB)\n", tstem.c_str(), mat,
-                         png.size() / 1024);
+                    vlog(geom_tag.c_str(), "textures %s → material slot %d (albedo=%s, normal=%s, mg=%s)\n",
+                         tstem.c_str(), mat,
+                         png_a.empty() ? "no" : "yes",
+                         png_n.empty() ? "no" : "yes",
+                         png_mg.empty() ? "no" : "yes");
                 }
                 wows_assets_bin_visual_info_free(vi);
             }

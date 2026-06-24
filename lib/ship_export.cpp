@@ -101,6 +101,49 @@ static std::string ship_to_rel(const std::string &abs_path, const std::string &n
     return rel;
 }
 
+static void wows_stitch_purge_empty_meshes(tinygltf::Model &model) {
+    std::vector<tinygltf::Mesh> active_meshes;
+    std::map<int, int> mesh_index_map;
+
+    // 1. For any node referencing an empty mesh, set mesh = -1
+    for (int ni = 0; ni < (int)model.nodes.size(); ++ni) {
+        int mi = model.nodes[ni].mesh;
+        if (mi >= 0 && mi < (int)model.meshes.size()) {
+            if (model.meshes[mi].primitives.empty()) {
+                model.nodes[ni].mesh = -1;
+            }
+        }
+    }
+
+    // 2. Filter out meshes that have empty primitives, and build new index map
+    for (int mi = 0; mi < (int)model.meshes.size(); ++mi) {
+        if (!model.meshes[mi].primitives.empty()) {
+            int new_idx = (int)active_meshes.size();
+            mesh_index_map[mi] = new_idx;
+            active_meshes.push_back(std::move(model.meshes[mi]));
+        } else {
+            mesh_index_map[mi] = -1;
+        }
+    }
+
+    // 3. Update mesh references in all nodes
+    for (auto &node : model.nodes) {
+        if (node.mesh >= 0) {
+            auto it = mesh_index_map.find(node.mesh);
+            if (it != mesh_index_map.end()) {
+                node.mesh = it->second;
+            } else {
+                node.mesh = -1;
+            }
+        }
+    }
+
+    int old_count = (int)model.meshes.size();
+    int new_count = (int)active_meshes.size();
+    model.meshes = std::move(active_meshes);
+    vlog("mesh_cleanup", "Purged %d empty meshes. Remaining: %d\n", old_count - new_count, new_count);
+}
+
 /* ── in-memory export (core implementation) ─────────────────────── */
 
 bool wows_stitch_export_ship_to_glb_mem(const std::string &game_dir, const std::string &ship_name,
@@ -381,6 +424,8 @@ bool wows_stitch_export_ship_to_glb_mem(const std::string &game_dir, const std::
         else if (!assets_pdb_ptr)
             vlog("assets.bin", "failed to open for visual lookup\n");
     }
+
+    wows_stitch_purge_empty_meshes(merged);
 
     wows_stitch_apply_default_material(merged);
 

@@ -7,6 +7,9 @@
 
 #include "wows-model-exporter.h"
 
+#define BCDEC_IMPLEMENTATION
+#include "../deps/bcdec.h"
+
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -81,7 +84,7 @@ static void bc4_block(const uint8_t *src, uint8_t av[16]) {
         av[i] = t[(bits >> (i * 3)) & 7];
 }
 
-enum DdsFmt { DDS_NONE, DDS_BC1, DDS_BC2, DDS_BC3, DDS_BC4, DDS_BC5 };
+enum DdsFmt { DDS_NONE, DDS_BC1, DDS_BC2, DDS_BC3, DDS_BC4, DDS_BC5, DDS_BC7 };
 
 std::vector<uint8_t> wows_stitch_decode_dds(const uint8_t *d, size_t sz, int *W, int *H) {
     if (sz < 128 || memcmp(d, "DDS ", 4) != 0)
@@ -120,6 +123,10 @@ std::vector<uint8_t> wows_stitch_decode_dds(const uint8_t *d, size_t sz, int *W,
         case 84:
             fmt = DDS_BC5;
             break;
+        case 98:
+        case 99:
+            fmt = DDS_BC7;
+            break;
         default:
             return {};
         }
@@ -152,27 +159,14 @@ std::vector<uint8_t> wows_stitch_decode_dds(const uint8_t *d, size_t sz, int *W,
             uint8_t tmp[64] = {};
             switch (fmt) {
             case DDS_BC1:
-                bc1_block(src, tmp);
+                bcdec_bc1(src, tmp, 16);
                 break;
-            case DDS_BC2: {
-                uint8_t cb[16];
-                bc1_block(src + 8, tmp);
-                for (int i = 0; i < 8; ++i) {
-                    cb[i * 2] = (src[i] & 0xF) * 17;
-                    cb[i * 2 + 1] = (src[i] >> 4) * 17;
-                }
-                for (int i = 0; i < 16; ++i)
-                    tmp[i * 4 + 3] = 255;
+            case DDS_BC2:
+                bcdec_bc2(src, tmp, 16);
                 break;
-            }
-            case DDS_BC3: {
-                uint8_t ab[16];
-                bc4_block(src, ab);
-                bc1_block(src + 8, tmp);
-                for (int i = 0; i < 16; ++i)
-                    tmp[i * 4 + 3] = 255;
+            case DDS_BC3:
+                bcdec_bc3(src, tmp, 16);
                 break;
-            }
             case DDS_BC4: {
                 uint8_t ab[16];
                 bc4_block(src, ab);
@@ -194,6 +188,9 @@ std::vector<uint8_t> wows_stitch_decode_dds(const uint8_t *d, size_t sz, int *W,
                 }
                 break;
             }
+            case DDS_BC7:
+                bcdec_bc7(src, tmp, 16);
+                break;
             default:
                 break;
             }
@@ -253,6 +250,24 @@ std::vector<uint8_t> wows_stitch_dds_to_png_from_memory(const uint8_t *data, siz
     return rgba_to_png(rgba, w, h, max_sz);
 }
 
+std::vector<uint8_t> wows_stitch_dds_to_png_from_memory_mg(const uint8_t *data, size_t size, int max_sz) {
+    int w, h;
+    std::vector<uint8_t> rgba = wows_stitch_decode_dds(data, size, &w, &h);
+    if (rgba.empty())
+        return {};
+    // Convert _mg format (R=Metallic, G=Gloss, B=AO) to glTF format (R=Occlusion/AO, G=Roughness, B=Metallic)
+    for (size_t i = 0; i < rgba.size(); i += 4) {
+        uint8_t r = rgba[i];
+        uint8_t g = rgba[i + 1];
+        uint8_t b = rgba[i + 2];
+        rgba[i] = b;            // glTF R: Occlusion (AO)
+        rgba[i + 1] = 255 - g;  // glTF G: Roughness = 1.0 - Glossiness
+        rgba[i + 2] = r;        // glTF B: Metallic
+        rgba[i + 3] = 255;      // glTF A
+    }
+    return rgba_to_png(rgba, w, h, max_sz);
+}
+
 std::vector<uint8_t> wows_stitch_dds_to_png(const std::string &path, int max_sz) {
     FILE *f = fopen(path.c_str(), "rb");
     if (!f)
@@ -273,5 +288,38 @@ std::vector<uint8_t> wows_stitch_dds_to_png(const std::string &path, int max_sz)
     std::vector<uint8_t> rgba = wows_stitch_decode_dds(raw.data(), raw.size(), &w, &h);
     if (rgba.empty())
         return {};
+    return rgba_to_png(rgba, w, h, max_sz);
+}
+
+std::vector<uint8_t> wows_stitch_dds_to_png_mg(const std::string &path, int max_sz) {
+    FILE *f = fopen(path.c_str(), "rb");
+    if (!f)
+        return {};
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (sz <= 0) {
+        fclose(f);
+        return {};
+    }
+    std::vector<uint8_t> raw((size_t)sz);
+    bool ok = fread(raw.data(), 1, (size_t)sz, f) == (size_t)sz;
+    fclose(f);
+    if (!ok)
+        return {};
+    int w, h;
+    std::vector<uint8_t> rgba = wows_stitch_decode_dds(raw.data(), raw.size(), &w, &h);
+    if (rgba.empty())
+        return {};
+    // Convert _mg format (R=Metallic, G=Gloss, B=AO) to glTF format (R=Occlusion/AO, G=Roughness, B=Metallic)
+    for (size_t i = 0; i < rgba.size(); i += 4) {
+        uint8_t r = rgba[i];
+        uint8_t g = rgba[i + 1];
+        uint8_t b = rgba[i + 2];
+        rgba[i] = b;            // glTF R: Occlusion (AO)
+        rgba[i + 1] = 255 - g;  // glTF G: Roughness = 1.0 - Glossiness
+        rgba[i + 2] = r;        // glTF B: Metallic
+        rgba[i + 3] = 255;      // glTF A
+    }
     return rgba_to_png(rgba, w, h, max_sz);
 }
