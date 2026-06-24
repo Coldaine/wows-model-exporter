@@ -678,7 +678,7 @@ static std::map<uint32_t, uint32_t> read_geom_tri_counts_from_mem(const uint8_t 
 
 /* ── texture finder ─────────────────────────────────────────────── */
 
-static const char *MFM_STRIP[] = {"_skinned", "_alpha", "_ep", nullptr};
+static const char *MFM_STRIP[] = {"_skinned", "_wire", "_dead", "_blaze", "_alpha", "_ep", nullptr};
 
 static std::string find_texture(const std::string &dir, const std::string &st, const char *channel) {
     std::vector<std::string> cands = {st};
@@ -689,21 +689,66 @@ static std::string find_texture(const std::string &dir, const std::string &st, c
             break;
         }
     }
-    for (auto &cs : cands)
-        for (auto ext : {".dd0", ".dd1", ".dd2", ".dds"}) {
-            std::string p = dir + "/" + cs + channel + ext;
-            if (wows_stitch_file_exists(p))
-                return p;
+
+    auto try_find = [&](const std::string &base_dir) -> std::string {
+        for (auto &cs : cands)
+            for (auto ext : {".dd0", ".dd1", ".dd2", ".dds"}) {
+                std::string p = base_dir + "/" + cs + channel + ext;
+                if (wows_stitch_file_exists(p))
+                    return p;
+            }
+        return "";
+    };
+
+    std::string result = try_find(dir);
+    if (!result.empty())
+        return result;
+    result = try_find(dir + "/textures");
+    if (!result.empty())
+        return result;
+
+    std::string tiled_dir = wows_stitch_path_dirname(dir);
+    if (!tiled_dir.empty() && tiled_dir != "/") {
+        size_t parent_sl = tiled_dir.rfind('/');
+        if (parent_sl != std::string::npos && parent_sl > 0) {
+            std::string tiled_path = tiled_dir.substr(0, parent_sl) + "/TILED";
+            result = try_find(tiled_path);
+            if (!result.empty())
+                return result;
         }
+    }
+
+    if (strcmp(channel, "_a") == 0 && !tiled_dir.empty() && tiled_dir != dir) {
+        for (auto &cs : cands)
+            for (auto ext : {".dd0", ".dd1", ".dd2", ".dds"}) {
+                std::string p = tiled_dir + "/" + cs + "_od" + ext;
+                if (wows_stitch_file_exists(p))
+                    return p;
+            }
+    }
+
     return "";
 }
 
+static std::vector<std::string> build_search_dirs(const std::string &mdir) {
+    std::vector<std::string> dirs;
+    dirs.push_back(mdir);
+    dirs.push_back(mdir + "/textures");
+    if (!mdir.empty() && mdir != "/") {
+        size_t parent_sl = mdir.rfind('/');
+        if (parent_sl != std::string::npos && parent_sl > 0) {
+            dirs.push_back(mdir.substr(0, parent_sl) + "/TILED");
+        }
+    }
+    return dirs;
+}
+
 static std::vector<uint8_t> load_texture_bytes(const std::string &tdir, const std::string &tstem, const char *channel,
-                                               const std::string &game_dir, wows_file_provider_t file_provider,
-                                               int max_sz) {
+                                                const std::string &game_dir, wows_file_provider_t file_provider,
+                                                int max_sz) {
     std::string dds = find_texture(tdir, tstem, channel);
     if (!dds.empty())
-        return wows_stitch_dds_to_png(dds, max_sz);
+        return wows_stitch_dds_to_png(dds, max_sz, true);
 
     if (!file_provider)
         return {};
@@ -722,17 +767,39 @@ static std::vector<uint8_t> load_texture_bytes(const std::string &tdir, const st
             break;
         }
     }
-    for (const auto &cs : cands) {
-        for (const char *ext : {".dd0", ".dd1", ".dd2", ".dds"}) {
-            std::string rel = mdir + "/" + cs + channel + ext;
-            auto buf = file_provider(rel);
-            if (!buf.empty()) {
-                auto png = wows_stitch_dds_to_png_from_memory(buf.data(), buf.size(), max_sz);
-                if (!png.empty())
-                    return png;
+
+    std::vector<std::string> search_dirs = build_search_dirs(mdir);
+    for (const auto &sd : search_dirs) {
+        for (const auto &cs : cands) {
+            for (const char *ext : {".dd0", ".dd1", ".dd2", ".dds"}) {
+                std::string rel = sd + "/" + cs + channel + ext;
+                auto buf = file_provider(rel);
+                if (!buf.empty()) {
+                    auto png = wows_stitch_dds_to_png_from_memory(buf.data(), buf.size(), max_sz, true);
+                    if (!png.empty())
+                        return png;
+                }
             }
         }
     }
+
+    // _od TILEDLAND overlay diffuse fallback
+    if (strcmp(channel, "_a") == 0) {
+        for (const auto &sd : search_dirs) {
+            for (const auto &cs : cands) {
+                for (const char *ext : {".dd0", ".dd1", ".dd2", ".dds"}) {
+                    std::string rel = sd + "/" + cs + "_od" + ext;
+                    auto buf = file_provider(rel);
+                    if (!buf.empty()) {
+                        auto png = wows_stitch_dds_to_png_from_memory(buf.data(), buf.size(), max_sz, true);
+                        if (!png.empty())
+                            return png;
+                    }
+                }
+            }
+        }
+    }
+
     return {};
 }
 
@@ -760,17 +827,39 @@ static std::vector<uint8_t> load_texture_bytes_mg(const std::string &tdir, const
             break;
         }
     }
-    for (const auto &cs : cands) {
-        for (const char *ext : {".dd0", ".dd1", ".dd2", ".dds"}) {
-            std::string rel = mdir + "/" + cs + channel + ext;
-            auto buf = file_provider(rel);
-            if (!buf.empty()) {
-                auto png = wows_stitch_dds_to_png_from_memory_mg(buf.data(), buf.size(), max_sz);
-                if (!png.empty())
-                    return png;
+
+    std::vector<std::string> search_dirs = build_search_dirs(mdir);
+    for (const auto &sd : search_dirs) {
+        for (const auto &cs : cands) {
+            for (const char *ext : {".dd0", ".dd1", ".dd2", ".dds"}) {
+                std::string rel = sd + "/" + cs + channel + ext;
+                auto buf = file_provider(rel);
+                if (!buf.empty()) {
+                    auto png = wows_stitch_dds_to_png_from_memory_mg(buf.data(), buf.size(), max_sz);
+                    if (!png.empty())
+                        return png;
+                }
             }
         }
     }
+
+    // _mgn fallback for _mg
+    if (strcmp(channel, "_mg") == 0) {
+        for (const auto &sd : search_dirs) {
+            for (const auto &cs : cands) {
+                for (const char *ext : {".dd0", ".dd1", ".dd2", ".dds"}) {
+                    std::string rel = sd + "/" + cs + "_mgn" + ext;
+                    auto buf = file_provider(rel);
+                    if (!buf.empty()) {
+                        auto png = wows_stitch_dds_to_png_from_memory_mgn(buf.data(), buf.size(), max_sz);
+                        if (!png.empty())
+                            return png;
+                    }
+                }
+            }
+        }
+    }
+
     return {};
 }
 

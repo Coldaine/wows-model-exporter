@@ -299,13 +299,18 @@ if(BUILD_TESTS)
     add_executable(wows-geometry-test tests/tests.c)
     target_link_libraries(wows-geometry-test PRIVATE wows-geometry
                                                      ${CUNIT_LIBRARY})
+    add_executable(wows-alpha-test tests/test_alpha_packed.cpp)
+    target_link_libraries(wows-alpha-test PRIVATE wows-geometry
+                                                    ${CUNIT_LIBRARY})
     add_test(NAME wows-geometry-test COMMAND wows-geometry-test)
+    add_test(NAME wows-alpha-test COMMAND wows-alpha-test)
     add_custom_target(
       tests
       COMMAND wows-geometry-test
+      COMMAND wows-alpha-test
       WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
       COMMENT "Running tests")
-    add_dependencies(tests wows-geometry-test)
+    add_dependencies(tests wows-geometry-test wows-alpha-test)
 
     if(COVERAGE)
       set(CMAKE_BUILD_TYPE Debug)
@@ -322,8 +327,9 @@ if(BUILD_TESTS)
         -j
         ${n_cores}
         DEPENDENCIES
-        wows-geometry-test)
-      add_dependencies(coverage wows-geometry-test)
+        wows-geometry-test
+        wows-alpha-test)
+      add_dependencies(coverage wows-geometry-test wows-alpha-test)
     endif()
   else()
     message(WARNING "CUnit not found; not building tests.")

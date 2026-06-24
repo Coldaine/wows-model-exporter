@@ -201,7 +201,7 @@ std::vector<uint8_t> wows_stitch_decode_dds(const uint8_t *d, size_t sz, int *W,
     return rgba;
 }
 
-static std::vector<uint8_t> rgba_to_png(std::vector<uint8_t> &rgba, int w, int h, int max_sz) {
+static std::vector<uint8_t> rgba_to_png(std::vector<uint8_t> &rgba, int w, int h, int max_sz, bool force_opaque) {
     if (max_sz > 0 && (w > max_sz || h > max_sz)) {
         float s = (float)max_sz / std::max(w, h);
         int nw = std::max(1, (int)(w * s)), nh = std::max(1, (int)(h * s));
@@ -211,12 +211,18 @@ static std::vector<uint8_t> rgba_to_png(std::vector<uint8_t> &rgba, int w, int h
         w = nw;
         h = nh;
     }
+    if (force_opaque) {
+        for (int i = 3, n = w * h * 4; i < n; i += 4)
+            rgba[i] = 255;
+    }
     bool has_alpha = false;
-    for (int i = 3, n = w * h * 4; i < n; i += 4)
-        if (rgba[i] != 255) {
-            has_alpha = true;
-            break;
-        }
+    if (!force_opaque) {
+        for (int i = 3, n = w * h * 4; i < n; i += 4)
+            if (rgba[i] != 255) {
+                has_alpha = true;
+                break;
+            }
+    }
     std::vector<uint8_t> rgb3;
     const uint8_t *pix = rgba.data();
     int channels = 4, stride = w * 4;
@@ -242,20 +248,54 @@ static std::vector<uint8_t> rgba_to_png(std::vector<uint8_t> &rgba, int w, int h
     return png;
 }
 
-std::vector<uint8_t> wows_stitch_dds_to_png_from_memory(const uint8_t *data, size_t size, int max_sz) {
+static std::vector<uint8_t> rgba_to_png(std::vector<uint8_t> &rgba, int w, int h, int max_sz) {
+    return rgba_to_png(rgba, w, h, max_sz, false);
+}
+
+std::vector<uint8_t> wows_stitch_dds_to_png_from_memory(const uint8_t *data, size_t size, int max_sz, bool force_opaque) {
     int w, h;
     std::vector<uint8_t> rgba = wows_stitch_decode_dds(data, size, &w, &h);
     if (rgba.empty())
         return {};
-    return rgba_to_png(rgba, w, h, max_sz);
+    return rgba_to_png(rgba, w, h, max_sz, force_opaque);
+}
+
+std::vector<uint8_t> wows_stitch_dds_to_png_from_memory(const uint8_t *data, size_t size, int max_sz) {
+    return wows_stitch_dds_to_png_from_memory(data, size, max_sz, false);
+}
+
+std::vector<uint8_t> wows_stitch_dds_to_png_from_memory_force_opaque(const uint8_t *data, size_t size, int max_sz) {
+    return wows_stitch_dds_to_png_from_memory(data, size, max_sz, true);
+}
+
+std::vector<uint8_t> wows_stitch_dds_to_png_from_memory_mg(const uint8_t *data, size_t size, int max_sz, bool force_opaque) {
+    int w, h;
+    std::vector<uint8_t> rgba = wows_stitch_decode_dds(data, size, &w, &h);
+    if (rgba.empty())
+        return {};
+    // Convert _mg / _mgn format (R=Metallic, G=Gloss, B=AO) to glTF format (R=Occlusion/AO, G=Roughness, B=Metallic)
+    for (size_t i = 0; i < rgba.size(); i += 4) {
+        uint8_t r = rgba[i];
+        uint8_t g = rgba[i + 1];
+        uint8_t b = rgba[i + 2];
+        rgba[i] = b;            // glTF R: Occlusion (AO)
+        rgba[i + 1] = 255 - g;  // glTF G: Roughness = 1.0 - Glossiness
+        rgba[i + 2] = r;        // glTF B: Metallic
+        rgba[i + 3] = 255;      // glTF A (opaque)
+    }
+    return rgba_to_png(rgba, w, h, max_sz, force_opaque);
 }
 
 std::vector<uint8_t> wows_stitch_dds_to_png_from_memory_mg(const uint8_t *data, size_t size, int max_sz) {
+    return wows_stitch_dds_to_png_from_memory_mg(data, size, max_sz, false);
+}
+
+std::vector<uint8_t> wows_stitch_dds_to_png_from_memory_mgn(const uint8_t *data, size_t size, int max_sz) {
     int w, h;
     std::vector<uint8_t> rgba = wows_stitch_decode_dds(data, size, &w, &h);
     if (rgba.empty())
         return {};
-    // Convert _mg format (R=Metallic, G=Gloss, B=AO) to glTF format (R=Occlusion/AO, G=Roughness, B=Metallic)
+    // Convert _mgn format (R=Metallic, G=Gloss, B=AO, A=extra) to glTF ORM format
     for (size_t i = 0; i < rgba.size(); i += 4) {
         uint8_t r = rgba[i];
         uint8_t g = rgba[i + 1];
@@ -263,12 +303,43 @@ std::vector<uint8_t> wows_stitch_dds_to_png_from_memory_mg(const uint8_t *data, 
         rgba[i] = b;            // glTF R: Occlusion (AO)
         rgba[i + 1] = 255 - g;  // glTF G: Roughness = 1.0 - Glossiness
         rgba[i + 2] = r;        // glTF B: Metallic
-        rgba[i + 3] = 255;      // glTF A
+        rgba[i + 3] = 255;      // glTF A (opaque)
     }
-    return rgba_to_png(rgba, w, h, max_sz);
+    return rgba_to_png(rgba, w, h, max_sz, false);
+}
+
+std::vector<uint8_t> wows_stitch_dds_to_png(const std::string &path, int max_sz, bool force_opaque) {
+    FILE *f = fopen(path.c_str(), "rb");
+    if (!f)
+        return {};
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (sz <= 0) {
+        fclose(f);
+        return {};
+    }
+    std::vector<uint8_t> raw((size_t)sz);
+    bool ok = fread(raw.data(), 1, (size_t)sz, f) == (size_t)sz;
+    fclose(f);
+    if (!ok)
+        return {};
+    int w, h;
+    std::vector<uint8_t> rgba = wows_stitch_decode_dds(raw.data(), raw.size(), &w, &h);
+    if (rgba.empty())
+        return {};
+    return rgba_to_png(rgba, w, h, max_sz, force_opaque);
 }
 
 std::vector<uint8_t> wows_stitch_dds_to_png(const std::string &path, int max_sz) {
+    return wows_stitch_dds_to_png(path, max_sz, false);
+}
+
+std::vector<uint8_t> wows_stitch_dds_to_png_force_opaque(const std::string &path, int max_sz) {
+    return wows_stitch_dds_to_png(path, max_sz, true);
+}
+
+std::vector<uint8_t> wows_stitch_dds_to_png_mg(const std::string &path, int max_sz, bool force_opaque) {
     FILE *f = fopen(path.c_str(), "rb");
     if (!f)
         return {};
@@ -284,42 +355,9 @@ std::vector<uint8_t> wows_stitch_dds_to_png(const std::string &path, int max_sz)
     fclose(f);
     if (!ok)
         return {};
-    int w, h;
-    std::vector<uint8_t> rgba = wows_stitch_decode_dds(raw.data(), raw.size(), &w, &h);
-    if (rgba.empty())
-        return {};
-    return rgba_to_png(rgba, w, h, max_sz);
+    return wows_stitch_dds_to_png_from_memory_mg(raw.data(), raw.size(), max_sz, force_opaque);
 }
 
 std::vector<uint8_t> wows_stitch_dds_to_png_mg(const std::string &path, int max_sz) {
-    FILE *f = fopen(path.c_str(), "rb");
-    if (!f)
-        return {};
-    fseek(f, 0, SEEK_END);
-    long sz = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    if (sz <= 0) {
-        fclose(f);
-        return {};
-    }
-    std::vector<uint8_t> raw((size_t)sz);
-    bool ok = fread(raw.data(), 1, (size_t)sz, f) == (size_t)sz;
-    fclose(f);
-    if (!ok)
-        return {};
-    int w, h;
-    std::vector<uint8_t> rgba = wows_stitch_decode_dds(raw.data(), raw.size(), &w, &h);
-    if (rgba.empty())
-        return {};
-    // Convert _mg format (R=Metallic, G=Gloss, B=AO) to glTF format (R=Occlusion/AO, G=Roughness, B=Metallic)
-    for (size_t i = 0; i < rgba.size(); i += 4) {
-        uint8_t r = rgba[i];
-        uint8_t g = rgba[i + 1];
-        uint8_t b = rgba[i + 2];
-        rgba[i] = b;            // glTF R: Occlusion (AO)
-        rgba[i + 1] = 255 - g;  // glTF G: Roughness = 1.0 - Glossiness
-        rgba[i + 2] = r;        // glTF B: Metallic
-        rgba[i + 3] = 255;      // glTF A
-    }
-    return rgba_to_png(rgba, w, h, max_sz);
+    return wows_stitch_dds_to_png_mg(path, max_sz, false);
 }

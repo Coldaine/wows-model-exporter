@@ -325,11 +325,14 @@ std::vector<uint8_t> wows_stitch_decode_dds(const uint8_t *d, size_t sz, int *W,
  *
  * @param path    Filesystem path to the `.dds` file.
  * @param max_sz  Maximum allowed width or height; 0 means no limit.
+ * @param force_opaque  If `true`, force alpha to 255 (opaque) to prevent
+ *                     packed material data being interpreted as transparency.
  * @return PNG-encoded bytes, or empty on failure.
  */
-std::vector<uint8_t> wows_stitch_dds_to_png(const std::string &path, int max_sz);
+std::vector<uint8_t> wows_stitch_dds_to_png(const std::string &path, int max_sz, bool force_opaque = false);
+std::vector<uint8_t> wows_stitch_dds_to_png_force_opaque(const std::string &path, int max_sz);
 
-std::vector<uint8_t> wows_stitch_dds_to_png_mg(const std::string &path, int max_sz);
+std::vector<uint8_t> wows_stitch_dds_to_png_mg(const std::string &path, int max_sz, bool force_opaque = false);
 
 /**
  * @brief Decode a DDS buffer in memory and encode it as a PNG byte buffer.
@@ -340,11 +343,16 @@ std::vector<uint8_t> wows_stitch_dds_to_png_mg(const std::string &path, int max_
  * @param data    Pointer to DDS file data in memory.
  * @param size    Size of the DDS data in bytes.
  * @param max_sz  Maximum allowed width or height; 0 means no limit.
+ * @param force_opaque  If `true`, force alpha to 255 (opaque).
  * @return PNG-encoded bytes, or empty on failure.
  */
-std::vector<uint8_t> wows_stitch_dds_to_png_from_memory(const uint8_t *data, size_t size, int max_sz);
+std::vector<uint8_t> wows_stitch_dds_to_png_from_memory(const uint8_t *data, size_t size, int max_sz,
+                                                        bool force_opaque = false);
+std::vector<uint8_t> wows_stitch_dds_to_png_from_memory_force_opaque(const uint8_t *data, size_t size, int max_sz);
 
-std::vector<uint8_t> wows_stitch_dds_to_png_from_memory_mg(const uint8_t *data, size_t size, int max_sz);
+std::vector<uint8_t> wows_stitch_dds_to_png_from_memory_mg(const uint8_t *data, size_t size, int max_sz,
+                                                           bool force_opaque = false);
+std::vector<uint8_t> wows_stitch_dds_to_png_from_memory_mgn(const uint8_t *data, size_t size, int max_sz);
 
 /** @} */
 
