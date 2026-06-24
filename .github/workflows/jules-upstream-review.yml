@@ -1,0 +1,41 @@
+name: Jules Upstream Review
+
+on:
+  schedule:
+    - cron: '0 8 */3 * *'
+  workflow_dispatch:
+
+jobs:
+  review-upstream:
+    name: Review upstream changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Invoke Jules
+        uses: google-labs-code/jules-invoke@v1
+        with:
+          starting_branch: main
+          include_commit_log: true
+          jules_api_key: ${{ secrets.JULES_API_KEY }}
+          prompt: |
+            You are reviewing upstream changes for this controlled World of Warships model exporter fork.
+
+            Repositories:
+            - Controlled fork: Coldaine/wows-model-exporter, branch main
+            - Upstream source: wows-tools/wows-model-exporter, branch main
+
+            Task:
+            1. Fetch and compare wows-tools/wows-model-exporter:main against this fork's main branch.
+            2. Identify upstream changes that are relevant and safe for this controlled fork.
+            3. Exclude unrelated packaging churn unless it affects build or test reliability.
+            4. Preserve local exporter fixes, especially GLB validity, PBR/material handling, World of Warships geometry parsing, and Windows packaging behavior.
+            5. Run the exporter test and build commands documented by this repository before opening a PR.
+            6. Open a PR in Coldaine/wows-model-exporter only if validation passes.
+
+            Constraints:
+            - Do not auto-merge changes.
+            - Do not modify Coldaine/WoWshipExport.
+            - Do not advance any WoWshipExport submodule pointer.
+            - Keep proposed changes scoped to safe upstream integration and validation fixes.
