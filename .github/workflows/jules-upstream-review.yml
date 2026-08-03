@@ -27,7 +27,7 @@ jobs:
             You are reviewing upstream changes for this controlled World of Warships model exporter fork.
 
             Repositories:
-            - Controlled fork: Coldaine/wows-model-exporter, branch main
+            - Controlled fork: MooseGooseConsulting/wows-model-exporter, branch main
             - Upstream source: wows-tools/wows-model-exporter, branch main
 
             Task:
@@ -36,10 +36,10 @@ jobs:
             3. Exclude unrelated packaging churn unless it affects build or test reliability.
             4. Preserve local exporter fixes, especially GLB validity, PBR/material handling, World of Warships geometry parsing, and Windows packaging behavior.
             5. Run the exporter test and build commands documented by this repository before opening a PR.
-            6. Open a PR in Coldaine/wows-model-exporter only if validation passes.
+            6. Open a PR in MooseGooseConsulting/wows-model-exporter only if validation passes.
 
             Constraints:
             - Do not auto-merge changes.
-            - Do not modify Coldaine/WoWshipExport.
+            - Do not modify MooseGooseConsulting/WoWshipExport.
             - Do not advance any WoWshipExport submodule pointer.
             - Keep proposed changes scoped to safe upstream integration and validation fixes.
