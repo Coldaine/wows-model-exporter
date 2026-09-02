@@ -293,19 +293,18 @@ endif()
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
 if(BUILD_TESTS)
+  include(CTest)
+
+  add_executable(wows-stitch-test tests/stitch_tests.cpp)
+  target_link_libraries(wows-stitch-test PRIVATE wows-geometry)
+  add_test(NAME wows-stitch-test COMMAND wows-stitch-test)
+
   find_library(CUNIT_LIBRARY cunit)
   if(CUNIT_LIBRARY)
-    include(CTest)
     add_executable(wows-geometry-test tests/tests.c)
     target_link_libraries(wows-geometry-test PRIVATE wows-geometry
                                                      ${CUNIT_LIBRARY})
     add_test(NAME wows-geometry-test COMMAND wows-geometry-test)
-    add_custom_target(
-      tests
-      COMMAND wows-geometry-test
-      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-      COMMENT "Running tests")
-    add_dependencies(tests wows-geometry-test)
 
     if(COVERAGE)
       set(CMAKE_BUILD_TYPE Debug)
@@ -327,6 +326,16 @@ if(BUILD_TESTS)
     endif()
   else()
     message(WARNING "CUnit not found; not building tests.")
+  endif()
+
+  add_custom_target(
+    tests
+    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    COMMENT "Running tests")
+  add_dependencies(tests wows-stitch-test)
+  if(CUNIT_LIBRARY)
+    add_dependencies(tests wows-geometry-test)
   endif()
 endif()
 

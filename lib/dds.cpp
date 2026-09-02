@@ -250,21 +250,24 @@ std::vector<uint8_t> wows_stitch_dds_to_png_from_memory(const uint8_t *data, siz
     return rgba_to_png(rgba, w, h, max_sz);
 }
 
+void wows_stitch_convert_mg_to_orm(std::vector<uint8_t> &rgba) {
+    for (size_t i = 0; i + 3 < rgba.size(); i += 4) {
+        uint8_t r = rgba[i];
+        uint8_t g = rgba[i + 1];
+        uint8_t b = rgba[i + 2];
+        rgba[i] = b;
+        rgba[i + 1] = 255 - g;
+        rgba[i + 2] = r;
+        rgba[i + 3] = 255;
+    }
+}
+
 std::vector<uint8_t> wows_stitch_dds_to_png_from_memory_mg(const uint8_t *data, size_t size, int max_sz) {
     int w, h;
     std::vector<uint8_t> rgba = wows_stitch_decode_dds(data, size, &w, &h);
     if (rgba.empty())
         return {};
-    // Convert _mg format (R=Metallic, G=Gloss, B=AO) to glTF format (R=Occlusion/AO, G=Roughness, B=Metallic)
-    for (size_t i = 0; i < rgba.size(); i += 4) {
-        uint8_t r = rgba[i];
-        uint8_t g = rgba[i + 1];
-        uint8_t b = rgba[i + 2];
-        rgba[i] = b;            // glTF R: Occlusion (AO)
-        rgba[i + 1] = 255 - g;  // glTF G: Roughness = 1.0 - Glossiness
-        rgba[i + 2] = r;        // glTF B: Metallic
-        rgba[i + 3] = 255;      // glTF A
-    }
+    wows_stitch_convert_mg_to_orm(rgba);
     return rgba_to_png(rgba, w, h, max_sz);
 }
 
@@ -311,15 +314,6 @@ std::vector<uint8_t> wows_stitch_dds_to_png_mg(const std::string &path, int max_
     std::vector<uint8_t> rgba = wows_stitch_decode_dds(raw.data(), raw.size(), &w, &h);
     if (rgba.empty())
         return {};
-    // Convert _mg format (R=Metallic, G=Gloss, B=AO) to glTF format (R=Occlusion/AO, G=Roughness, B=Metallic)
-    for (size_t i = 0; i < rgba.size(); i += 4) {
-        uint8_t r = rgba[i];
-        uint8_t g = rgba[i + 1];
-        uint8_t b = rgba[i + 2];
-        rgba[i] = b;            // glTF R: Occlusion (AO)
-        rgba[i + 1] = 255 - g;  // glTF G: Roughness = 1.0 - Glossiness
-        rgba[i + 2] = r;        // glTF B: Metallic
-        rgba[i + 3] = 255;      // glTF A
-    }
+    wows_stitch_convert_mg_to_orm(rgba);
     return rgba_to_png(rgba, w, h, max_sz);
 }

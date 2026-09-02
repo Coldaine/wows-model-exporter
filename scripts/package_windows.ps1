@@ -24,7 +24,7 @@ if (-not (Test-Path $BinDir)) {
 # it without requiring PYTHONHOME or PYTHONPATH to be manually set.
 $PyRoot = Join-Path $BuildDir "vcpkg_installed\x64-windows\tools\python3"
 if (-not (Test-Path $PyRoot)) {
-    Write-Host "vcpkg Python not found at $PyRoot — searching system Python..."
+    Write-Host "vcpkg Python not found at $PyRoot - searching system Python..."
     $PythonExe = $null
     foreach ($cmd in @('python', 'python3')) {
         $found = Get-Command $cmd -ErrorAction SilentlyContinue
